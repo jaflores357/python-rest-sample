@@ -1,0 +1,11 @@
+version: '3'
+services:
+  loadsmart-app:
+    restart: always
+    build:
+      context: ./
+    container_name: loadsmart
+    env_file:
+      - ./region.env
+    ports:
+      - "8080:8080"

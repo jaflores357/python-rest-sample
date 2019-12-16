@@ -1,0 +1,9 @@
+- All scrips were build using sa-east-1 AWS region, but they can be changed to other region
+
+- The Rest API was built using the swagger editor (https://editor.swagger.io/?_ga=2.69066129.1232634098.1575990838-65405164.1575990838)
+
+- The boto3 SDK was used to interact with the balancer and the moto module to mock the tests.
+
+- The load tests were performed using the Locust module.
+
+- All the infrastructure was coded in Cloudformation that creates VPC, Subnet, Security Groups, IAM Policies and was used Auto Scaling Group to create 2 machines (for testing) and to attach them into the balancer

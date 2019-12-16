@@ -1,0 +1,130 @@
+---
+swagger: "2.0"
+info:
+  description: "SRE Test - Loadsmart"
+  version: "1.0.0"
+  title: "Site Reliable Engineer Test"
+  contact:
+    email: "jobs@loadsmart.com"
+security:
+- basicAuth: []
+paths:
+  /healthcheck:
+    get:
+      description: "API health check"
+      operationId: "healthcheck_get"
+      parameters: []
+      responses:
+        "200":
+          description: "the service is up"
+      x-swagger-router-controller: "swagger_server.controllers.default_controller"
+  /elb/{elbName}:
+    get:
+      description: "List machines attached to a particular load balancer"
+      operationId: "list_machines_elb"
+      produces:
+      - "application/json"
+      parameters:
+      - name: "elbName"
+        in: "path"
+        description: "pass the load balancer name"
+        required: true
+        type: "string"
+      responses:
+        "200":
+          description: "machines listed"
+          schema:
+            type: "array"
+            items:
+              $ref: "#/definitions/MachineInfo"
+        "404":
+          description: "the elb does not exist"
+      x-swagger-router-controller: "swagger_server.controllers.default_controller"
+    post:
+      description: "Attach an instance on the load balancer"
+      operationId: "attach_instance"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - name: "elbName"
+        in: "path"
+        description: "pass the load balancer name"
+        required: true
+        type: "string"
+      - in: "body"
+        name: "machineId"
+        description: "instance identifier"
+        required: false
+        schema:
+          $ref: "#/definitions/MachineId"
+      responses:
+        "201":
+          description: "instance added"
+          schema:
+            $ref: "#/definitions/MachineInfo"
+        "400":
+          description: "wrong data format"
+        "409":
+          description: "instance already on load balancer"
+      x-swagger-router-controller: "swagger_server.controllers.default_controller"
+    delete:
+      description: "Detach an instance from the load balancer"
+      operationId: "elb_elb_name_delete"
+      parameters:
+      - name: "elbName"
+        in: "path"
+        description: "pass the load balancer name"
+        required: true
+        type: "string"
+      - in: "body"
+        name: "machineId"
+        description: "instance identifier"
+        required: false
+        schema:
+          $ref: "#/definitions/MachineId"
+      responses:
+        "201":
+          description: "instance removed"
+          schema:
+            $ref: "#/definitions/MachineInfo"
+        "400":
+          description: "wrong data format"
+        "409":
+          description: "instance is not on load balancer"
+      x-swagger-router-controller: "swagger_server.controllers.default_controller"
+securityDefinitions:
+  basicAuth:
+    type: "basic"
+definitions:
+  MachineInfo:
+    type: "object"
+    required:
+    - "instanceId"
+    - "instanceType"
+    - "launchDate"
+    properties:
+      instanceId:
+        type: "string"
+        example: "i-5203422c"
+      instanceType:
+        type: "string"
+        example: "t1.micro"
+      launchDate:
+        type: "string"
+        example: "2016-08-29T09:12:33.001Z"
+    example:
+      instanceId: "i-5203422c"
+      instanceType: "t1.micro"
+      launchDate: "2016-08-29T09:12:33.001Z"
+  MachineId:
+    type: "object"
+    required:
+    - "instanceId"
+    properties:
+      instanceId:
+        type: "string"
+        example: "i-5203422c"
+    example:
+      instanceId: "i-5203422c"

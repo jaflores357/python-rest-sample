@@ -1,0 +1,13 @@
+[
+    { "ParameterKey": "EnvironmentTag", "ParameterValue": "tst" },
+    { "ParameterKey": "SetupTag", "ParameterValue": "loadsmart" },
+    { "ParameterKey": "KeyName", "ParameterValue": "loadsmart-key" },
+    { "ParameterKey": "InstanceType", "ParameterValue": "t2.small" },
+    { "ParameterKey": "S3Bucket", "ParameterValue": "loadsmart-app-bucket" },
+    { "ParameterKey": "S3Key", "ParameterValue": "loadsmart-app.1.zip" },
+    { "ParameterKey": "SNSEmail", "ParameterValue": "jorgef.flores@gmail.com" },
+    { "ParameterKey": "SSHLocation", "ParameterValue": "201.37.122.242/32" },
+    { "ParameterKey": "LatestAmiId", "ParameterValue": "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2" },
+    { "ParameterKey": "VpcNet", "ParameterValue": "10.0.0.0/16" },
+    { "ParameterKey": "CidrBlockPublicSubnet1A", "ParameterValue": "10.0.1.0/24" }
+]

@@ -1,0 +1,547 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Configure VPC
+Parameters:
+
+  InstanceType:
+    Description: Bulk EC2 instance types for Bulkcontent stack
+    Type: String
+    Default: t2.small
+    AllowedValues:
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t2.large
+      - t2.xlarge
+    ConstraintDescription: must be a valid EC2 instance type.
+
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: jorge_flores
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+  
+  LatestAmiId:
+    Type:  'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+  
+  SSHLocation:
+    Description: Comma separated IP address ranges that can be used to SSH to the
+      EC2 instances
+    Type: String
+    Default: 201.37.122.242/32
+     
+  EnvironmentTag:
+    Default: tst
+    Description: Tag resources with environment name for easy filtering
+    Type: String
+    AllowedValues:
+      - 'tst'
+      - 'hlg'
+      - 'prd'
+
+  SetupTag:
+    Description: Setup name to be shared across master-slave regions
+    Default: loadsmart
+    Type: String
+  
+  S3Bucket:
+    Description: Bucket where the deploys artifacts are
+    Default: loadsmart-deploy
+    Type: String
+
+  S3Key:
+    Description: Artifacts to deploy
+    Default: loadsmart-1.0.zip
+    Type: String
+
+  VpcNet:
+    Description: 'VPC Net range, e.g. : 10.0.0.0/16'
+    Default: 10.0.0.0/16
+    Type: String
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range in x.x.x.x/x format.
+  
+  CidrBlockPublicSubnet1A:
+    Description: 'Subnet CIDR Public1A block , e.g. : 10.10.0.0/24'
+    Default: 10.0.1.0/24
+    Type: String
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range in x.x.x.x/x format.
+
+  SNSEmail:
+    Default: jorge.flores@syntonic.com
+    Description: Email address to notify
+    Type: String
+
+Mappings:
+
+  RegionShortCode:
+    us-east-1:
+      value: nvi
+    us-east-2:
+      value: ohi
+    us-west-1:
+      value: nca
+    us-west-2:
+      value: ore
+    eu-west-1: 
+      value: ire
+    eu-central-1:
+      value: fkt
+    ap-northeast-1:
+      value: tko
+    ap-northeast-2:
+      value: seo
+    ap-southeast-1:
+      value: sgo
+    ap-southeast-2:
+      value: syd
+    ap-south-1:
+      value: mmb
+    sa-east-1:
+      value: spo
+    cn-north-1:
+      value: bjg
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: S3 Buckets
+        Parameters:
+          - S3Bucket
+          - S3Key
+      - Label:
+          default: Setup Environment
+        Parameters:
+          - EnvironmentTag
+          - SetupTag
+          - KeyName
+          - LatestAmiId
+          - SSHLocation
+      - Label:
+          default: Network Configuration
+        Parameters:
+          - VpcNet
+          - CidrBlockPublicSubnet1A
+      - Label:
+          default: Alarms ressources
+        Parameters:
+          - SNSEmail
+
+Resources:
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref 'VpcNet'
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !FindInMap [ RegionShortCode, !Ref 'AWS::Region', value ]
+              - !Ref 'EnvironmentTag'
+              - !Ref 'SetupTag'
+              - vpc
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Environment
+          Value: !Ref 'EnvironmentTag'
+
+  PublicSubnet1A:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Ref 'CidrBlockPublicSubnet1A'
+      AvailabilityZone: !Select
+        - '0'
+        - !GetAZs
+          Ref: AWS::Region
+      VpcId: !Ref 'VPC'
+      MapPublicIpOnLaunch: 'true'
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Environment
+          Value: !Ref 'EnvironmentTag'
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !FindInMap [ RegionShortCode, !Ref 'AWS::Region', value ]
+              - !Ref 'EnvironmentTag'
+              - !Ref 'SetupTag'
+              - public-1a
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Environment
+          Value: !Ref 'EnvironmentTag'
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !FindInMap [ RegionShortCode, !Ref 'AWS::Region', value ]
+              - !Ref 'EnvironmentTag'
+              - !Ref 'SetupTag'
+              - vpc-gateway
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref 'VPC'
+      InternetGatewayId: !Ref 'InternetGateway'
+    DependsOn:
+      - VPC
+      - InternetGateway
+
+  PublicSubnetRoute:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'VPC'
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Environment
+          Value: !Ref 'EnvironmentTag'
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !FindInMap [ RegionShortCode, !Ref 'AWS::Region', value ]
+              - !Ref 'EnvironmentTag'
+              - !Ref 'SetupTag'
+              - public-route
+    DependsOn: VPC
+
+  SubnetRouteAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'PublicSubnetRoute'
+      SubnetId: !Ref 'PublicSubnet1A'
+
+  PublicSubnetRouteRule1:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: '0.0.0.0/0'
+      RouteTableId: !Ref 'PublicSubnetRoute'
+      GatewayId: !Ref 'InternetGateway'
+    DependsOn:
+      - InternetGateway
+      - PublicSubnetRoute
+      - SubnetRouteAssociation1
+
+  AlarmNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Join
+          - '-'
+          - - !FindInMap [ RegionShortCode, !Ref 'AWS::Region', value ]
+            - !Ref 'EnvironmentTag'
+            - !Ref 'SetupTag'
+            - alarms-brazil
+      Subscription:
+        - Endpoint: !Ref 'SNSEmail'
+          Protocol: email
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancing::LoadBalancer
+    Properties:
+      Subnets: 
+        - !Ref PublicSubnet1A        
+      CrossZone: 'true'
+      SecurityGroups:
+        - !Ref LoadBalancerSecurityGroup
+      Listeners:
+      - LoadBalancerPort: '80'
+        InstancePort: '8080'
+        Protocol: HTTP
+      HealthCheck:
+        Target: HTTP:8080/healthcheck
+        HealthyThreshold: '3'
+        UnhealthyThreshold: '5'
+        Interval: '30'
+        Timeout: '5'
+      ConnectionDrainingPolicy:
+        Enabled: 'true'
+        Timeout: '300'
+      LoadBalancerName: 'default-elb'
+      Tags: 
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Environment
+          Value: !Ref 'EnvironmentTag'
+        - Key: Name
+          Value: 'default-elb'
+    DependsOn:
+      - PublicSubnet1A
+      - LoadBalancerSecurityGroup
+
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Join
+        - '-'
+        - - !FindInMap [ RegionShortCode, !Ref 'AWS::Region', value ]
+          - !Ref 'EnvironmentTag'
+          - !Ref 'SetupTag'
+          - elb-sg
+      GroupDescription: 'Application LoadBalncer security group'
+      VpcId: !Ref 'VPC'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: '0.0.0.0/0'
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: '0.0.0.0/0'
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Environment
+          Value: !Ref 'EnvironmentTag'
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !FindInMap [ RegionShortCode, !Ref 'AWS::Region', value ]
+              - !Ref 'EnvironmentTag'
+              - !Ref 'SetupTag'
+              - elb-sg
+    DependsOn: VPC
+
+  LoadSmartAppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Join
+        - '-'
+        - - !FindInMap [ RegionShortCode, !Ref 'AWS::Region', value ]
+          - !Ref 'EnvironmentTag'
+          - !Ref 'SetupTag'
+          - application-sg
+      GroupDescription: Application host security group
+      VpcId: !Ref 'VPC'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: !Ref 'SSHLocation'
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          SourceSecurityGroupId: !Ref 'LoadBalancerSecurityGroup'
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: '0.0.0.0/0'
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Environment
+          Value: !Ref 'EnvironmentTag'
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !FindInMap [ RegionShortCode, !Ref 'AWS::Region', value ]
+              - !Ref 'EnvironmentTag'
+              - !Ref 'SetupTag'
+              - application-sg
+    DependsOn: 
+      - VPC
+      - LoadBalancerSecurityGroup
+
+  IntanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join
+        - '-'
+        - - !FindInMap [ RegionShortCode, !Ref 'AWS::Region', value ]
+          - !Ref 'EnvironmentTag'
+          - !Ref 'SetupTag'
+          - instance-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+
+  IntanceRolePolicies:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Join
+        - '-'
+        - - !FindInMap [ RegionShortCode, !Ref 'AWS::Region', value ]
+          - !Ref 'EnvironmentTag'
+          - !Ref 'SetupTag'
+          - instance-policy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              - logs:DescribeLogStreams
+              - logs:PutMetricFilter
+              - cloudwatch:PutMetricData
+              - cloudwatch:PutMetricAlarm
+              - cloudwatch:DeleteAlarms
+              - elasticloadbalancing:RegisterTargets
+              - elasticloadbalancing:DeregisterTargets
+              - elasticloadbalancing:DescribeTargetHealth
+              - elasticloadbalancing:DescribeTargetGroupAttributes
+              - elasticloadbalancing:DescribeLoadBalancers
+              - elasticloadbalancing:DeregisterInstancesFromLoadBalancer
+              - elasticloadbalancing:RegisterInstancesWithLoadBalancer
+              - s3:Get*
+              - s3:List*
+              - s3:Put*
+            Resource: '*'
+      Roles:
+        - !Ref 'IntanceRole'
+    DependsOn: IntanceRole
+  
+  IntanceRoleProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      InstanceProfileName: !Join
+        - '-'
+        - - !FindInMap [ RegionShortCode, !Ref 'AWS::Region', value ]
+          - !Ref 'EnvironmentTag'
+          - !Ref 'SetupTag'
+          - instance-profile
+      Roles:
+        - !Ref 'IntanceRole'
+    DependsOn: IntanceRole  
+
+  LoadSmartAppAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Join
+        - '-'
+        - - !FindInMap [ RegionShortCode, !Ref 'AWS::Region', value ]
+          - !Ref 'EnvironmentTag'
+          - !Ref 'SetupTag'
+          - loadsmart-asg
+      VPCZoneIdentifier: 
+        - !Ref 'PublicSubnet1A'
+      LaunchConfigurationName: !Ref 'LoadSmartAppLaunchConfig'
+      LoadBalancerNames: 
+        - !Ref LoadBalancer
+      DesiredCapacity: 2
+      MinSize: 1
+      MaxSize: 2
+      NotificationConfiguration:
+        TopicARN: !Ref 'AlarmNotificationTopic'
+        NotificationTypes:
+          - autoscaling:EC2_INSTANCE_LAUNCH
+          - autoscaling:EC2_INSTANCE_LAUNCH_ERROR
+          - autoscaling:EC2_INSTANCE_TERMINATE
+          - autoscaling:EC2_INSTANCE_TERMINATE_ERROR
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+          PropagateAtLaunch: true
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+          PropagateAtLaunch: true
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !FindInMap [ RegionShortCode, !Ref 'AWS::Region', value ]
+              - !Ref 'EnvironmentTag'
+              - !Ref 'SetupTag'
+              - app
+          PropagateAtLaunch: true
+    DependsOn:
+      - IntanceRoleProfile
+      - AlarmNotificationTopic
+      - LoadSmartAppLaunchConfig
+
+  LoadSmartAppLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref 'LatestAmiId'
+      IamInstanceProfile: !Ref IntanceRoleProfile
+      KeyName: !Ref 'KeyName'
+      SecurityGroups:
+        - !Ref LoadSmartAppSecurityGroup
+      UserData: 
+        Fn::Base64:
+          Fn::Sub:
+            - |
+              #!/bin/bash -xe
+              s3_bucket="${s3_bucket}"
+              s3_key="${s3_key}"
+              region="${region}"
+              aws s3 cp s3://$s3_bucket/$s3_key /tmp/loadsmart-app.zip
+              mkdir /opt/loadsmart-app
+              cat<< EOF > /opt/loadsmart-app/region.env
+              AWS_DEFAULT_REGION=$region
+              EOF
+              unzip /tmp/loadsmart-app.zip -d /opt/loadsmart-app/
+              rm -f  /tmp/loadsmart-app.zip
+              yum -y install docker
+              /bin/systemctl start docker
+              /bin/systemctl enable docker
+              /usr/bin/curl -L https://github.com/docker/compose/releases/download/1.22.0/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
+              chmod +x /usr/local/bin/docker-compose
+              docker-compose -f /opt/loadsmart-app/docker-compose.yaml up -d  
+            - s3_bucket: !Ref S3Bucket
+              s3_key: !Ref S3Key
+              region: !Ref 'AWS::Region'
+
+  LoadSmartAppCPUAlarmHigh:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: CPU > 60% for 2 minutes
+      MetricName: CPUUtilization
+      AlarmActions:
+        - !Ref AlarmNotificationTopic
+      OKActions:
+        - !Ref AlarmNotificationTopic
+      Namespace: AWS/EC2
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 60
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref 'LoadSmartAppAutoScalingGroup'
+      ComparisonOperator: GreaterThanThreshold
+
+  LoadBalancerUnhealthyHostAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmDescription: Unhealthy host
+      MetricName: UnHealthyHostCount
+      Namespace: AWS/ELB
+      Statistic: Minimum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 0
+      AlarmActions:
+        - !Ref AlarmNotificationTopic
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: LoadBalancerName
+          Value: !Ref LoadBalancer
+
+
+Outputs:
+
+  LoadBalancerDNSName:
+    Value: !GetAtt LoadBalancer.DNSName
+    Description: 'Load Balancer DNS Name'
+    Export:
+      Name: LoadBalancerDNSName    
+
