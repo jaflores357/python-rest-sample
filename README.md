@@ -31,15 +31,25 @@ aws cli installed into local machine
 # File parameters.json
 
 EnvironmentTag: Tag fo environment 
-SetupTag: Tag of application 
+
+SetupTag: Tag of application
+
 KeyName: The key used to access the machines
+
 InstanceType: The instance type used to create the ec2 instances
+
 S3Bucket: Bucket name that contain the application 
+
 S3Key: The application in ZIP format
+
 SNSEmail: Emails used to receive the alerts
+
 SSHLocation: IP address to allow SSH to ec2 instances
+
 LatestAmiId: AMI ID used to create the ec2 instances 
+
 VpcNet: Network range of VPC
+
 CidrBlockPublicSubnet1A: Network range of public subnet
 
 
